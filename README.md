@@ -1,20 +1,32 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Lumina: The Writing Architect
 
-# Run and deploy your AI Studio app
-
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/83a3ef13-b399-4181-9c7c-023bfa855fc0
+A privacy-first, local-only productivity tool for authors and researchers.
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
+### Prerequisites
+- Node.js (v18 or higher)
+- npm
 
+### Setup
+1. **Install dependencies**:
+   ```bash
+   npm install
+   ```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+2. **Run the app**:
+   ```bash
+   npm run dev
+   ```
+   The development server will start on [http://localhost:3000](http://localhost:3000).
+
+### How it works
+- **No AI Required**: This project does not use LLMs or external AI APIs.
+- **Local Storage**: Your data is saved locally in your browser's `localStorage`.
+- **Vite**: The app uses Vite for a fast development experience. The `npm run dev` command is defined in `package.json` and runs the Vite development server.
+
+## Features
+- **Manuscript Management**: Organize your book into chapters and sections.
+- **Brain Dump**: Capture raw ideas, tag them, and link them to your manuscript.
+- **Research Pipeline**: Track your sources and investigation tasks.
+- **Progress Tracking**: Monitor your daily word count and overall project goals.
