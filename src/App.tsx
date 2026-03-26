@@ -19,7 +19,14 @@ import {
   History,
   Lightbulb,
   Tag,
-  ArrowRight
+  ArrowRight,
+  Quote,
+  Copy,
+  BookMarked,
+  Languages,
+  Info,
+  Download,
+  GitGraph
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -35,9 +42,10 @@ import {
   Bar,
   Cell
 } from 'recharts';
+import { Stage, Layer, Rect, Text, Line as KonvaLine, Group, Circle } from 'react-konva';
 import { format, subDays, isSameDay, parseISO, startOfDay } from 'date-fns';
-import { cn, formatWordCount, calculateTotalWordCount } from './lib/utils';
-import { BookProject, Chapter, Section, ResearchItem, DailyProgress, Topic } from './types';
+import { cn, formatWordCount, calculateTotalWordCount, formatCitation, exportToWord } from './lib/utils';
+import { BookProject, Chapter, Section, ResearchItem, DailyProgress, Topic, Citation, GlossaryTerm, MindMapNode, MindMapEdge } from './types';
 
 // Initial dummy data
 const INITIAL_DATA: BookProject = {
@@ -66,6 +74,21 @@ const INITIAL_DATA: BookProject = {
     { id: 'r1', title: 'Attention Mechanism Paper', link: 'https://arxiv.org/abs/1706.03762', notes: 'Key reference for Chapter 2', isCompleted: true, category: 'Academic' },
     { id: 'r2', title: 'Scaling Laws for LLMs', link: 'https://arxiv.org/abs/2001.08361', notes: 'Need to summarize the compute vs data trade-offs', isCompleted: false, category: 'Academic' }
   ],
+  citations: [
+    { 
+      id: 'cit1', 
+      type: 'book', 
+      author: 'Vaswani, A.', 
+      title: 'Attention is All You Need', 
+      year: '2017', 
+      publisher: 'NIPS',
+      url: 'https://arxiv.org/abs/1706.03762'
+    }
+  ],
+  glossary: [
+    { id: 'g1', term: 'Transformer', definition: 'A deep learning architecture based on the attention mechanism.', category: 'Architecture' },
+    { id: 'g2', term: 'Self-Attention', definition: 'A mechanism that relates different positions of a single sequence in order to compute a representation of the sequence.', category: 'Mechanism' }
+  ],
   topics: [
     { id: 't1', title: 'Ethical Implications of AGI', description: 'How do we ensure alignment?', priority: 'high', tags: ['Ethics', 'Future'] },
     { id: 't2', title: 'Energy Consumption of Training', description: 'Environmental impact of large models', priority: 'medium', tags: ['Environment', 'Hardware'] }
@@ -78,7 +101,12 @@ const INITIAL_DATA: BookProject = {
     { date: subDays(new Date(), 2).toISOString(), wordCount: 1500, manualLog: 0 },
     { date: subDays(new Date(), 1).toISOString(), wordCount: 2100, manualLog: 0 },
     { date: new Date().toISOString(), wordCount: 1800, manualLog: 0 }
-  ]
+  ],
+  mindMapNodes: [
+    { id: 'n1', chapterId: 'c1', x: 100, y: 100 },
+    { id: 'n2', chapterId: 'c2', x: 400, y: 100 }
+  ],
+  mindMapEdges: []
 };
 
 export default function App() {
@@ -93,13 +121,17 @@ export default function App() {
         // Ensure arrays exist even if missing in parsed data
         chapters: parsed.chapters || INITIAL_DATA.chapters,
         research: parsed.research || INITIAL_DATA.research,
+        citations: parsed.citations || INITIAL_DATA.citations || [],
+        glossary: parsed.glossary || INITIAL_DATA.glossary || [],
         topics: parsed.topics || INITIAL_DATA.topics || [],
-        dailyProgress: parsed.dailyProgress || INITIAL_DATA.dailyProgress || []
+        dailyProgress: parsed.dailyProgress || INITIAL_DATA.dailyProgress || [],
+        mindMapNodes: parsed.mindMapNodes || INITIAL_DATA.mindMapNodes || [],
+        mindMapEdges: parsed.mindMapEdges || INITIAL_DATA.mindMapEdges || []
       };
     }
     return INITIAL_DATA;
   });
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'manuscript' | 'research' | 'braindump'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'manuscript' | 'research' | 'braindump' | 'citations' | 'glossary' | 'logic'>('dashboard');
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -232,6 +264,36 @@ export default function App() {
             Research
           </button>
           <button 
+            onClick={() => setActiveTab('citations')}
+            className={cn(
+              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+              activeTab === 'citations' ? "bg-black text-white" : "text-gray-600 hover:bg-gray-100"
+            )}
+          >
+            <Quote size={18} />
+            Citations
+          </button>
+          <button 
+            onClick={() => setActiveTab('glossary')}
+            className={cn(
+              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+              activeTab === 'glossary' ? "bg-black text-white" : "text-gray-600 hover:bg-gray-100"
+            )}
+          >
+            <Languages size={18} />
+            Glossary
+          </button>
+          <button 
+            onClick={() => setActiveTab('logic')}
+            className={cn(
+              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+              activeTab === 'logic' ? "bg-black text-white" : "text-gray-600 hover:bg-gray-100"
+            )}
+          >
+            <GitGraph size={18} />
+            Logic Flow
+          </button>
+          <button 
             onClick={() => setActiveTab('braindump')}
             className={cn(
               "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
@@ -297,6 +359,33 @@ export default function App() {
             onAdd={(item) => setProject(prev => ({ ...prev, research: [...prev.research, item] }))}
           />
         )}
+        {activeTab === 'citations' && (
+          <CitationManager 
+            citations={project.citations}
+            onAdd={(citation) => setProject(prev => ({ ...prev, citations: [...prev.citations, citation] }))}
+            onDelete={(id) => setProject(prev => ({ ...prev, citations: prev.citations.filter(c => c.id !== id) }))}
+            onExport={() => exportToWord(project)}
+          />
+        )}
+        {activeTab === 'glossary' && (
+          <GlossaryManager 
+            glossary={project.glossary}
+            onAdd={(term) => setProject(prev => ({ ...prev, glossary: [...prev.glossary, term] }))}
+            onUpdate={(id, updates) => setProject(prev => ({
+              ...prev,
+              glossary: prev.glossary.map(t => t.id === id ? { ...t, ...updates } : t)
+            }))}
+            onDelete={(id) => setProject(prev => ({ ...prev, glossary: prev.glossary.filter(t => t.id !== id) }))}
+            onExport={() => exportToWord(project)}
+          />
+        )}
+        {activeTab === 'logic' && (
+          <MindMap 
+            project={project}
+            onUpdateNodes={(nodes) => setProject(prev => ({ ...prev, mindMapNodes: nodes }))}
+            onUpdateEdges={(edges) => setProject(prev => ({ ...prev, mindMapEdges: edges }))}
+          />
+        )}
         {activeTab === 'braindump' && (
           <BrainDump 
             topics={project.topics}
@@ -334,6 +423,588 @@ export default function App() {
           />
         )}
       </main>
+    </div>
+  );
+}
+
+function MindMap({
+  project,
+  onUpdateNodes,
+  onUpdateEdges
+}: {
+  project: BookProject;
+  onUpdateNodes: (nodes: MindMapNode[]) => void;
+  onUpdateEdges: (edges: MindMapEdge[]) => void;
+}) {
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [edgeStartNodeId, setEdgeStartNodeId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      setDimensions({
+        width: containerRef.current.offsetWidth,
+        height: containerRef.current.offsetHeight
+      });
+    }
+  }, []);
+
+  // Ensure all chapters have nodes
+  useEffect(() => {
+    const existingChapterIds = new Set(project.mindMapNodes.map(n => n.chapterId));
+    const missingChapters = project.chapters.filter(c => !existingChapterIds.has(c.id));
+    
+    if (missingChapters.length > 0) {
+      const newNodes = [...project.mindMapNodes];
+      missingChapters.forEach((c, idx) => {
+        newNodes.push({
+          id: `n${Date.now()}${idx}`,
+          chapterId: c.id,
+          x: 100 + (idx * 50),
+          y: 100 + (idx * 50)
+        });
+      });
+      onUpdateNodes(newNodes);
+    }
+  }, [project.chapters, project.mindMapNodes, onUpdateNodes]);
+
+  const handleDragEnd = (nodeId: string, e: any) => {
+    const updatedNodes = project.mindMapNodes.map(n => 
+      n.id === nodeId ? { ...n, x: e.target.x(), y: e.target.y() } : n
+    );
+    onUpdateNodes(updatedNodes);
+  };
+
+  const handleNodeClick = (nodeId: string) => {
+    if (edgeStartNodeId) {
+      if (edgeStartNodeId !== nodeId) {
+        // Create edge
+        const newEdge: MindMapEdge = {
+          id: `e${Date.now()}`,
+          fromNodeId: edgeStartNodeId,
+          toNodeId: nodeId
+        };
+        onUpdateEdges([...project.mindMapEdges, newEdge]);
+      }
+      setEdgeStartNodeId(null);
+    } else {
+      setEdgeStartNodeId(nodeId);
+    }
+  };
+
+  const handleDeleteEdge = (edgeId: string) => {
+    onUpdateEdges(project.mindMapEdges.filter(e => e.id !== edgeId));
+  };
+
+  return (
+    <div className="h-full flex flex-col bg-gray-50">
+      <header className="p-8 pb-4">
+        <h2 className="text-3xl font-bold tracking-tight">Logic Flow</h2>
+        <p className="text-gray-500 mt-1">Visualize connections and narrative progression between chapters</p>
+        <div className="mt-4 flex gap-4 text-xs font-medium text-gray-400">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-black rounded" /> Drag nodes to reposition
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 border-2 border-black rounded-full" /> Click two nodes to connect them
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-red-500 rounded-full" /> Click a connection to delete it
+          </div>
+        </div>
+      </header>
+      
+      <div ref={containerRef} className="flex-1 relative overflow-hidden cursor-crosshair">
+        <Stage width={dimensions.width} height={dimensions.height}>
+          <Layer>
+            {/* Edges */}
+            {project.mindMapEdges.map(edge => {
+              const fromNode = project.mindMapNodes.find(n => n.id === edge.fromNodeId);
+              const toNode = project.mindMapNodes.find(n => n.id === edge.toNodeId);
+              if (!fromNode || !toNode) return null;
+
+              return (
+                <KonvaLine
+                  key={edge.id}
+                  points={[fromNode.x + 100, fromNode.y + 40, toNode.x + 100, toNode.y + 40]}
+                  stroke="#E5E7EB"
+                  strokeWidth={2}
+                  onClick={() => handleDeleteEdge(edge.id)}
+                  onMouseEnter={(e: any) => {
+                    const container = e.target.getStage().container();
+                    container.style.cursor = 'pointer';
+                    e.target.stroke('#EF4444');
+                    e.target.draw();
+                  }}
+                  onMouseLeave={(e: any) => {
+                    const container = e.target.getStage().container();
+                    container.style.cursor = 'crosshair';
+                    e.target.stroke('#E5E7EB');
+                    e.target.draw();
+                  }}
+                />
+              );
+            })}
+
+            {/* Nodes */}
+            {project.mindMapNodes.map(node => {
+              const chapter = project.chapters.find(c => c.id === node.chapterId);
+              if (!chapter) return null;
+
+              const isSelected = edgeStartNodeId === node.id;
+
+              return (
+                <Group
+                  key={node.id}
+                  x={node.x}
+                  y={node.y}
+                  draggable
+                  onDragEnd={(e) => handleDragEnd(node.id, e)}
+                  onClick={() => handleNodeClick(node.id)}
+                  onMouseEnter={(e: any) => {
+                    const container = e.target.getStage().container();
+                    container.style.cursor = 'grab';
+                  }}
+                  onMouseLeave={(e: any) => {
+                    const container = e.target.getStage().container();
+                    container.style.cursor = 'crosshair';
+                  }}
+                >
+                  <Rect
+                    width={200}
+                    height={80}
+                    fill="white"
+                    cornerRadius={12}
+                    stroke={isSelected ? "black" : "#F3F4F6"}
+                    strokeWidth={isSelected ? 2 : 1}
+                    shadowBlur={5}
+                    shadowColor="rgba(0,0,0,0.05)"
+                  />
+                  <Text
+                    text={chapter.title}
+                    fontSize={12}
+                    fontStyle="bold"
+                    width={180}
+                    padding={10}
+                    align="center"
+                    verticalAlign="middle"
+                    height={80}
+                    wrap="char"
+                  />
+                  {isSelected && (
+                    <Circle
+                      x={200}
+                      y={40}
+                      radius={4}
+                      fill="black"
+                    />
+                  )}
+                </Group>
+              );
+            })}
+          </Layer>
+        </Stage>
+      </div>
+    </div>
+  );
+}
+
+function GlossaryManager({
+  glossary,
+  onAdd,
+  onUpdate,
+  onDelete,
+  onExport
+}: {
+  glossary: GlossaryTerm[];
+  onAdd: (term: GlossaryTerm) => void;
+  onUpdate: (id: string, updates: Partial<GlossaryTerm>) => void;
+  onDelete: (id: string) => void;
+  onExport: () => void;
+}) {
+  const [isAdding, setIsAdding] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [newTerm, setNewTerm] = useState<Partial<GlossaryTerm>>({ term: '', definition: '', category: 'General' });
+
+  const handleAdd = () => {
+    if (!newTerm.term || !newTerm.definition) return;
+    onAdd({
+      id: `g${Date.now()}`,
+      term: newTerm.term,
+      definition: newTerm.definition,
+      category: newTerm.category || 'General',
+      usageNotes: newTerm.usageNotes
+    });
+    setNewTerm({ term: '', definition: '', category: 'General' });
+    setIsAdding(false);
+  };
+
+  const filteredGlossary = glossary.filter(item => 
+    item.term.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    item.definition.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.category?.toLowerCase().includes(searchTerm.toLowerCase())
+  ).sort((a, b) => a.term.localeCompare(b.term));
+
+  return (
+    <div className="p-8 max-w-6xl mx-auto space-y-8">
+      <header className="flex justify-between items-end">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Glossary & Terminology</h2>
+          <p className="text-gray-500 mt-1">Maintain consistency in your technical terms and concepts</p>
+        </div>
+        <div className="flex gap-3">
+          <button 
+            onClick={onExport}
+            className="px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 border border-gray-200 hover:bg-gray-50 transition-colors"
+          >
+            <Download size={18} />
+            Export Word
+          </button>
+          <button 
+            onClick={() => setIsAdding(true)}
+            className="bg-black text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-gray-800 transition-colors"
+          >
+            <Plus size={18} />
+            Add Term
+          </button>
+        </div>
+      </header>
+
+      <div className="flex gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+          <input 
+            type="text"
+            placeholder="Search terms, definitions, or categories..."
+            className="w-full pl-10 pr-4 py-3 bg-white border border-gray-100 rounded-xl focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {isAdding && (
+        <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-xl space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase text-gray-400">Term</label>
+              <input 
+                placeholder="e.g. Backpropagation"
+                className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-black text-sm"
+                value={newTerm.term}
+                onChange={e => setNewTerm({...newTerm, term: e.target.value})}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase text-gray-400">Category</label>
+              <input 
+                placeholder="e.g. Neural Networks"
+                className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-black text-sm"
+                value={newTerm.category}
+                onChange={e => setNewTerm({...newTerm, category: e.target.value})}
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold uppercase text-gray-400">Definition</label>
+            <textarea 
+              placeholder="What does this term mean?"
+              className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-black text-sm h-24 resize-none"
+              value={newTerm.definition}
+              onChange={e => setNewTerm({...newTerm, definition: e.target.value})}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold uppercase text-gray-400">Usage Notes (Optional)</label>
+            <input 
+              placeholder="e.g. Only use in Chapter 4 context"
+              className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-black text-sm"
+              value={newTerm.usageNotes}
+              onChange={e => setNewTerm({...newTerm, usageNotes: e.target.value})}
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={() => setIsAdding(false)} className="px-4 py-2 text-sm font-bold text-gray-400">Cancel</button>
+            <button onClick={handleAdd} className="bg-black text-white px-6 py-2 rounded-xl text-sm font-bold">Save Term</button>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-4">
+        {filteredGlossary.length === 0 ? (
+          <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
+            <Languages className="mx-auto text-gray-200 mb-4" size={48} />
+            <p className="text-gray-400 text-sm">No terms found matching your search.</p>
+          </div>
+        ) : (
+          filteredGlossary.map(item => (
+            <div key={item.id} className="bg-white p-6 rounded-2xl border border-gray-100 group hover:border-black transition-all">
+              <div className="flex justify-between items-start">
+                <div className="space-y-3 flex-1">
+                  <div className="flex items-center gap-3">
+                    <h4 className="text-lg font-bold tracking-tight">{item.term}</h4>
+                    <span className="text-[10px] font-bold uppercase tracking-widest bg-gray-100 px-2 py-0.5 rounded text-gray-500">
+                      {item.category}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600 leading-relaxed">{item.definition}</p>
+                  {item.usageNotes && (
+                    <div className="flex items-start gap-2 bg-blue-50 p-3 rounded-lg">
+                      <Info size={14} className="text-blue-500 mt-0.5 shrink-0" />
+                      <p className="text-[11px] text-blue-700 font-medium italic">{item.usageNotes}</p>
+                    </div>
+                  )}
+                </div>
+                <button 
+                  onClick={() => onDelete(item.id)}
+                  className="opacity-0 group-hover:opacity-100 p-2 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-600 transition-all"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CitationManager({ 
+  citations, 
+  onAdd,
+  onDelete,
+  onExport
+}: { 
+  citations: Citation[]; 
+  onAdd: (citation: Citation) => void;
+  onDelete: (id: string) => void;
+  onExport: () => void;
+}) {
+  const [isAdding, setIsAdding] = useState(false);
+  const [style, setStyle] = useState<'APA' | 'MLA'>('APA');
+  const [newItem, setNewItem] = useState<Partial<Citation>>({ type: 'book' });
+
+  const handleAdd = () => {
+    if (!newItem.title || !newItem.author) return;
+    onAdd({
+      id: `cit${Date.now()}`,
+      type: newItem.type as any,
+      author: newItem.author || '',
+      title: newItem.title || '',
+      year: newItem.year || '',
+      publisher: newItem.publisher,
+      journal: newItem.journal,
+      volume: newItem.volume,
+      issue: newItem.issue,
+      pages: newItem.pages,
+      doi: newItem.doi,
+      url: newItem.url,
+      accessDate: newItem.accessDate
+    });
+    setNewItem({ type: 'book' });
+    setIsAdding(false);
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    // In a real app we'd show a toast here
+  };
+
+  return (
+    <div className="p-8 max-w-6xl mx-auto space-y-8">
+      <header className="flex justify-between items-end">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Citation Manager</h2>
+          <p className="text-gray-500 mt-1">Organize your sources and generate formatted references</p>
+        </div>
+        <div className="flex gap-3">
+          <button 
+            onClick={onExport}
+            className="px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 border border-gray-200 hover:bg-gray-50 transition-colors"
+          >
+            <Download size={18} />
+            Export Word
+          </button>
+          <div className="flex bg-gray-100 rounded-xl p-1">
+            <button 
+              onClick={() => setStyle('APA')}
+              className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-all", style === 'APA' ? "bg-white shadow-sm" : "text-gray-400")}
+            >
+              APA
+            </button>
+            <button 
+              onClick={() => setStyle('MLA')}
+              className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-all", style === 'MLA' ? "bg-white shadow-sm" : "text-gray-400")}
+            >
+              MLA
+            </button>
+          </div>
+          <button 
+            onClick={() => setIsAdding(true)}
+            className="bg-black text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-gray-800 transition-colors"
+          >
+            <Plus size={18} />
+            Add Source
+          </button>
+        </div>
+      </header>
+
+      {isAdding && (
+        <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-xl space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase text-gray-400">Type</label>
+              <select 
+                className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-black text-sm"
+                value={newItem.type}
+                onChange={e => setNewItem({...newItem, type: e.target.value as any})}
+              >
+                <option value="book">Book</option>
+                <option value="article">Journal Article</option>
+                <option value="web">Webpage</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <label className="text-[10px] font-bold uppercase text-gray-400">Author(s)</label>
+              <input 
+                placeholder="e.g. Smith, J., & Doe, A."
+                className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-black text-sm"
+                value={newItem.author || ''}
+                onChange={e => setNewItem({...newItem, author: e.target.value})}
+              />
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="space-y-1 md:col-span-3">
+              <label className="text-[10px] font-bold uppercase text-gray-400">Title</label>
+              <input 
+                placeholder="Source Title"
+                className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-black text-sm"
+                value={newItem.title || ''}
+                onChange={e => setNewItem({...newItem, title: e.target.value})}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase text-gray-400">Year</label>
+              <input 
+                placeholder="2024"
+                className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-black text-sm"
+                value={newItem.year || ''}
+                onChange={e => setNewItem({...newItem, year: e.target.value})}
+              />
+            </div>
+          </div>
+
+          {newItem.type === 'book' && (
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase text-gray-400">Publisher</label>
+              <input 
+                placeholder="Publisher Name"
+                className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-black text-sm"
+                value={newItem.publisher || ''}
+                onChange={e => setNewItem({...newItem, publisher: e.target.value})}
+              />
+            </div>
+          )}
+
+          {newItem.type === 'article' && (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="space-y-1 md:col-span-2">
+                <label className="text-[10px] font-bold uppercase text-gray-400">Journal</label>
+                <input 
+                  placeholder="Journal Name"
+                  className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-black text-sm"
+                  value={newItem.journal || ''}
+                  onChange={e => setNewItem({...newItem, journal: e.target.value})}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-gray-400">Vol/Issue</label>
+                <div className="flex gap-2">
+                  <input placeholder="V" className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-black text-sm" value={newItem.volume || ''} onChange={e => setNewItem({...newItem, volume: e.target.value})} />
+                  <input placeholder="I" className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-black text-sm" value={newItem.issue || ''} onChange={e => setNewItem({...newItem, issue: e.target.value})} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-gray-400">Pages</label>
+                <input placeholder="123-145" className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-black text-sm" value={newItem.pages || ''} onChange={e => setNewItem({...newItem, pages: e.target.value})} />
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase text-gray-400">URL</label>
+              <input 
+                placeholder="https://..."
+                className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-black text-sm"
+                value={newItem.url || ''}
+                onChange={e => setNewItem({...newItem, url: e.target.value})}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase text-gray-400">DOI</label>
+              <input 
+                placeholder="10.1000/..."
+                className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-black text-sm"
+                value={newItem.doi || ''}
+                onChange={e => setNewItem({...newItem, doi: e.target.value})}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <button onClick={() => setIsAdding(false)} className="px-4 py-2 text-sm font-bold text-gray-400">Cancel</button>
+            <button onClick={handleAdd} className="bg-black text-white px-6 py-2 rounded-xl text-sm font-bold">Save Source</button>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        {citations.length === 0 ? (
+          <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
+            <BookMarked className="mx-auto text-gray-200 mb-4" size={48} />
+            <p className="text-gray-400 text-sm">No citations added yet.</p>
+          </div>
+        ) : (
+          citations.map(citation => (
+            <div key={citation.id} className="bg-white p-6 rounded-2xl border border-gray-100 group hover:border-black transition-all">
+              <div className="flex justify-between items-start">
+                <div className="space-y-2 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-widest bg-gray-100 px-2 py-0.5 rounded text-gray-500">
+                      {citation.type}
+                    </span>
+                    <span className="text-[10px] font-bold text-gray-300">{citation.year}</span>
+                  </div>
+                  <p className="text-sm font-serif italic text-gray-800 leading-relaxed">
+                    {formatCitation(citation, style)}
+                  </p>
+                </div>
+                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button 
+                    onClick={() => copyToClipboard(formatCitation(citation, style))}
+                    className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-black transition-colors"
+                    title="Copy formatted citation"
+                  >
+                    <Copy size={16} />
+                  </button>
+                  <button 
+                    onClick={() => onDelete(citation.id)}
+                    className="p-2 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-600 transition-colors"
+                    title="Delete source"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

@@ -27,6 +27,5 @@ A privacy-first, local-only productivity tool for authors and researchers.
 
 ## Features
 - **Manuscript Management**: Organize your book into chapters and sections.
-- **Brain Dump**: Capture raw ideas, tag them, and link them to your manuscript.
 - **Research Pipeline**: Track your sources and investigation tasks.
 - **Progress Tracking**: Monitor your daily word count and overall project goals.

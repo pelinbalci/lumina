@@ -36,13 +36,54 @@ export interface Topic {
   tags: string[];
 }
 
+export interface Citation {
+  id: string;
+  type: 'book' | 'article' | 'web' | 'other';
+  author: string;
+  title: string;
+  year: string;
+  publisher?: string;
+  journal?: string;
+  volume?: string;
+  issue?: string;
+  pages?: string;
+  doi?: string;
+  url?: string;
+  accessDate?: string;
+}
+
+export interface GlossaryTerm {
+  id: string;
+  term: string;
+  definition: string;
+  usageNotes?: string;
+  category?: string;
+}
+
+export interface MindMapNode {
+  id: string;
+  chapterId: string;
+  x: number;
+  y: number;
+}
+
+export interface MindMapEdge {
+  id: string;
+  fromNodeId: string;
+  toNodeId: string;
+}
+
 export interface BookProject {
   id: string;
   title: string;
   chapters: Chapter[];
   research: ResearchItem[];
-  topics: Topic[]; // New: Brain Dump topics
+  citations: Citation[];
+  glossary: GlossaryTerm[];
+  topics: Topic[];
   dailyProgress: DailyProgress[];
   targetWordCount: number;
-  dailyGoal: number; // Daily word count goal
+  dailyGoal: number;
+  mindMapNodes: MindMapNode[];
+  mindMapEdges: MindMapEdge[];
 }
