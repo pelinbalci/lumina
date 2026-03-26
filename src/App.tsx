@@ -26,7 +26,9 @@ import {
   Languages,
   Info,
   Download,
-  GitGraph
+  GitGraph,
+  Upload,
+  ShieldCheck
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -221,6 +223,39 @@ export default function App() {
     });
   };
 
+  const handleExportProject = () => {
+    const dataStr = JSON.stringify(project, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    const exportFileDefaultName = `${project.title.replace(/\s+/g, '_')}_Backup_${format(new Date(), 'yyyy-MM-dd')}.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+  };
+
+  const handleImportProject = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const importedProject = JSON.parse(event.target?.result as string);
+        // Basic validation
+        if (importedProject.title && Array.isArray(importedProject.chapters)) {
+          setProject(importedProject);
+          alert('Project restored successfully!');
+        } else {
+          alert('Invalid project file format.');
+        }
+      } catch (error) {
+        alert('Error reading project file.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="flex h-screen bg-[#F5F5F5] text-[#1A1A1A] font-sans overflow-hidden">
       {/* Sidebar */}
@@ -331,6 +366,8 @@ export default function App() {
             project={project} 
             onLogWords={handleLogDailyWords}
             onUpdateGoal={(goal) => setProject(prev => ({ ...prev, dailyGoal: goal }))}
+            onBackup={handleExportProject}
+            onRestore={handleImportProject}
           />
         )}
         {activeTab === 'manuscript' && (
@@ -347,6 +384,7 @@ export default function App() {
               ...prev,
               chapters: prev.chapters.map(c => c.id === id ? { ...c, title } : c)
             }))}
+            onExport={() => exportToWord(project)}
           />
         )}
         {activeTab === 'research' && (
@@ -1012,13 +1050,18 @@ function CitationManager({
 function Dashboard({ 
   project, 
   onLogWords,
-  onUpdateGoal
+  onUpdateGoal,
+  onBackup,
+  onRestore
 }: { 
   project: BookProject;
   onLogWords: (words: number) => void;
   onUpdateGoal: (goal: number) => void;
+  onBackup: () => void;
+  onRestore: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   const [logInput, setLogInput] = useState('');
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const chartData = useMemo(() => {
     return project.dailyProgress.map(p => ({
@@ -1106,6 +1149,42 @@ function Dashboard({
         </div>
       </div>
 
+      {/* Backup & Restore Section */}
+      <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-400">
+            <ShieldCheck size={24} />
+          </div>
+          <div>
+            <h4 className="font-bold text-lg">Local Backup & Security</h4>
+            <p className="text-sm text-gray-500">Download a full copy of your project to your computer for safe keeping.</p>
+          </div>
+        </div>
+        <div className="flex gap-3 w-full md:w-auto">
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={onRestore} 
+            className="hidden" 
+            accept=".json"
+          />
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="flex-1 md:flex-none px-6 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 border border-gray-200 hover:bg-gray-50 transition-colors"
+          >
+            <Upload size={18} />
+            Restore from File
+          </button>
+          <button 
+            onClick={onBackup}
+            className="flex-1 md:flex-none bg-black text-white px-6 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors shadow-lg shadow-black/10"
+          >
+            <Download size={18} />
+            Backup Project
+          </button>
+        </div>
+      </div>
+
       <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
         <h3 className="text-sm font-bold uppercase tracking-wider text-gray-400 mb-8">Writing Velocity</h3>
         <div className="h-[300px] w-full">
@@ -1165,7 +1244,8 @@ function Manuscript({
   onAddSection,
   onReorderChapter,
   onReorderSection,
-  onUpdateChapterTitle
+  onUpdateChapterTitle,
+  onExport
 }: { 
   project: BookProject;
   selectedSectionId: string | null;
@@ -1176,6 +1256,7 @@ function Manuscript({
   onReorderChapter: (idx: number, direction: 'up' | 'down') => void;
   onReorderSection: (chapterId: string, idx: number, direction: 'up' | 'down') => void;
   onUpdateChapterTitle: (id: string, title: string) => void;
+  onExport: () => void;
 }) {
   const selectedSection = useMemo(() => {
     for (const chapter of project.chapters) {
@@ -1189,13 +1270,22 @@ function Manuscript({
     <div className="flex h-full">
       {/* Outline Column */}
       <div className="w-80 border-r border-gray-200 bg-white overflow-auto">
-        <div className="p-6 flex justify-between items-center border-b border-gray-50 sticky top-0 bg-white z-10">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Outline</h3>
+        <div className="p-6 flex flex-col gap-4 border-b border-gray-50 sticky top-0 bg-white z-10">
+          <div className="flex justify-between items-center">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Outline</h3>
+            <button 
+              onClick={onAddChapter}
+              className="p-1 hover:bg-gray-100 rounded-md transition-colors flex items-center gap-1 text-[10px] font-bold uppercase"
+            >
+              <Plus size={14} /> Add Chapter
+            </button>
+          </div>
           <button 
-            onClick={onAddChapter}
-            className="p-1 hover:bg-gray-100 rounded-md transition-colors flex items-center gap-1 text-[10px] font-bold uppercase"
+            onClick={onExport}
+            className="w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border border-gray-200 hover:bg-gray-50 transition-colors"
           >
-            <Plus size={14} /> Add Chapter
+            <Download size={14} />
+            Export Manuscript
           </button>
         </div>
         <div className="p-4 space-y-8">

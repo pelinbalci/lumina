@@ -48,23 +48,65 @@ export function formatCitation(citation: any, style: 'APA' | 'MLA' = 'APA'): str
 }
 
 export async function exportToWord(project: any) {
-  const { citations, glossary, title } = project;
+  const { chapters, citations, glossary, title } = project;
 
   const children: any[] = [
     new Paragraph({
-      text: `${title} - Project Assets`,
+      text: `${title}`,
       heading: HeadingLevel.HEADING_1,
       alignment: AlignmentType.CENTER,
     }),
     new Paragraph({ text: "" }), // Spacer
   ];
 
+  // Manuscript Section
+  if (chapters && chapters.length > 0) {
+    children.push(
+      new Paragraph({
+        text: "Manuscript",
+        heading: HeadingLevel.HEADING_1,
+        pageBreakBefore: true,
+      }),
+      new Paragraph({ text: "" })
+    );
+
+    chapters.forEach((chapter: any, cIdx: number) => {
+      children.push(
+        new Paragraph({
+          text: `Chapter ${cIdx + 1}: ${chapter.title}`,
+          heading: HeadingLevel.HEADING_2,
+          spacing: { before: 400, after: 200 },
+        })
+      );
+
+      chapter.sections.forEach((section: any) => {
+        children.push(
+          new Paragraph({
+            text: section.title,
+            heading: HeadingLevel.HEADING_3,
+            spacing: { before: 200, after: 100 },
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: section.content,
+                size: 24,
+              }),
+            ],
+            spacing: { after: 200 },
+          })
+        );
+      });
+    });
+  }
+
   // Citations Section
-  if (citations.length > 0) {
+  if (citations && citations.length > 0) {
     children.push(
       new Paragraph({
         text: "Citations & References",
-        heading: HeadingLevel.HEADING_2,
+        heading: HeadingLevel.HEADING_1,
+        pageBreakBefore: true,
       }),
       new Paragraph({ text: "" })
     );
@@ -85,11 +127,12 @@ export async function exportToWord(project: any) {
   }
 
   // Glossary Section
-  if (glossary.length > 0) {
+  if (glossary && glossary.length > 0) {
     children.push(
       new Paragraph({
         text: "Glossary & Terminology",
-        heading: HeadingLevel.HEADING_2,
+        heading: HeadingLevel.HEADING_1,
+        pageBreakBefore: true,
       }),
       new Paragraph({ text: "" })
     );
@@ -135,5 +178,5 @@ export async function exportToWord(project: any) {
   });
 
   const blob = await Packer.toBlob(doc);
-  saveAs(blob, `${title.replace(/\s+/g, '_')}_Assets.docx`);
+  saveAs(blob, `${title.replace(/\s+/g, '_')}_Manuscript.docx`);
 }
