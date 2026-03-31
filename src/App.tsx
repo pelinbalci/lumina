@@ -203,6 +203,30 @@ export default function App() {
     }));
   };
 
+  const handleDeleteChapter = (chapterId: string) => {
+    if (!confirm('Are you sure you want to delete this chapter and all its sections?')) return;
+    setProject(prev => ({
+      ...prev,
+      chapters: prev.chapters.filter(c => c.id !== chapterId),
+      mindMapNodes: prev.mindMapNodes.filter(n => n.chapterId !== chapterId)
+    }));
+  };
+
+  const handleDeleteSection = (chapterId: string, sectionId: string) => {
+    if (!confirm('Are you sure you want to delete this section?')) return;
+    setProject(prev => ({
+      ...prev,
+      chapters: prev.chapters.map(chapter => 
+        chapter.id === chapterId 
+          ? { ...chapter, sections: chapter.sections.filter(s => s.id !== sectionId) } 
+          : chapter
+      )
+    }));
+    if (selectedSectionId === sectionId) {
+      setSelectedSectionId(null);
+    }
+  };
+
   const handleLogDailyWords = (words: number) => {
     const today = startOfDay(new Date()).toISOString();
     setProject(prev => {
@@ -378,6 +402,8 @@ export default function App() {
             onUpdateSection={handleUpdateSection}
             onAddChapter={handleAddChapter}
             onAddSection={handleAddSection}
+            onDeleteChapter={handleDeleteChapter}
+            onDeleteSection={handleDeleteSection}
             onReorderChapter={handleReorderChapter}
             onReorderSection={handleReorderSection}
             onUpdateChapterTitle={(id, title) => setProject(prev => ({
@@ -1242,6 +1268,8 @@ function Manuscript({
   onUpdateSection,
   onAddChapter,
   onAddSection,
+  onDeleteChapter,
+  onDeleteSection,
   onReorderChapter,
   onReorderSection,
   onUpdateChapterTitle,
@@ -1253,6 +1281,8 @@ function Manuscript({
   onUpdateSection: (id: string, updates: Partial<Section>) => void;
   onAddChapter: () => void;
   onAddSection: (chapterId: string) => void;
+  onDeleteChapter: (id: string) => void;
+  onDeleteSection: (chapterId: string, id: string) => void;
   onReorderChapter: (idx: number, direction: 'up' | 'down') => void;
   onReorderSection: (chapterId: string, idx: number, direction: 'up' | 'down') => void;
   onUpdateChapterTitle: (id: string, title: string) => void;
@@ -1299,12 +1329,22 @@ function Manuscript({
                     <button onClick={() => onReorderChapter(cIdx, 'down')} className="p-0.5 hover:bg-gray-100 rounded text-gray-300 hover:text-black"><ChevronDown size={10} /></button>
                   </div>
                 </div>
-                <button 
-                  onClick={() => onAddSection(chapter.id)}
-                  className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-100 rounded text-gray-400 transition-all"
-                >
-                  <Plus size={12} />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button 
+                    onClick={() => onAddSection(chapter.id)}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-100 rounded text-gray-400 transition-all"
+                    title="Add Section"
+                  >
+                    <Plus size={12} />
+                  </button>
+                  <button 
+                    onClick={() => onDeleteChapter(chapter.id)}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 rounded text-gray-400 hover:text-red-600 transition-all"
+                    title="Delete Chapter"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
               </div>
               <input 
                 value={chapter.title}
@@ -1330,6 +1370,13 @@ function Manuscript({
                       <button onClick={() => onReorderSection(chapter.id, sIdx, 'up')} className="p-0.5 hover:bg-gray-100 rounded text-gray-300 hover:text-black"><ChevronUp size={10} /></button>
                       <button onClick={() => onReorderSection(chapter.id, sIdx, 'down')} className="p-0.5 hover:bg-gray-100 rounded text-gray-300 hover:text-black"><ChevronDown size={10} /></button>
                     </div>
+                    <button 
+                      onClick={() => onDeleteSection(chapter.id, section.id)}
+                      className="absolute -right-6 opacity-0 group-hover/section:opacity-100 p-1 hover:bg-red-50 rounded text-gray-400 hover:text-red-600 transition-all"
+                      title="Delete Section"
+                    >
+                      <Trash2 size={12} />
+                    </button>
                   </div>
                 ))}
               </div>
