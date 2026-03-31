@@ -62,9 +62,11 @@ export interface GlossaryTerm {
 
 export interface MindMapNode {
   id: string;
-  chapterId: string;
+  type: 'chapter' | 'section' | 'topic';
+  referenceId: string;
   x: number;
   y: number;
+  color?: string;
 }
 
 export interface MindMapEdge {

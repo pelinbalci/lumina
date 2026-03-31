@@ -105,8 +105,8 @@ const INITIAL_DATA: BookProject = {
     { date: new Date().toISOString(), wordCount: 1800, manualLog: 0 }
   ],
   mindMapNodes: [
-    { id: 'n1', chapterId: 'c1', x: 100, y: 100 },
-    { id: 'n2', chapterId: 'c2', x: 400, y: 100 }
+    { id: 'n1', type: 'chapter', referenceId: 'c1', x: 100, y: 100 },
+    { id: 'n2', type: 'chapter', referenceId: 'c2', x: 400, y: 100 }
   ],
   mindMapEdges: []
 };
@@ -127,7 +127,12 @@ export default function App() {
         glossary: parsed.glossary || INITIAL_DATA.glossary || [],
         topics: parsed.topics || INITIAL_DATA.topics || [],
         dailyProgress: parsed.dailyProgress || INITIAL_DATA.dailyProgress || [],
-        mindMapNodes: parsed.mindMapNodes || INITIAL_DATA.mindMapNodes || [],
+        mindMapNodes: (parsed.mindMapNodes || INITIAL_DATA.mindMapNodes).map((n: any) => {
+          if (n.chapterId) {
+            return { id: n.id, type: 'chapter', referenceId: n.chapterId, x: n.x, y: n.y };
+          }
+          return n;
+        }),
         mindMapEdges: parsed.mindMapEdges || INITIAL_DATA.mindMapEdges || []
       };
     }
@@ -208,7 +213,7 @@ export default function App() {
     setProject(prev => ({
       ...prev,
       chapters: prev.chapters.filter(c => c.id !== chapterId),
-      mindMapNodes: prev.mindMapNodes.filter(n => n.chapterId !== chapterId)
+      mindMapNodes: prev.mindMapNodes.filter(n => !(n.type === 'chapter' && n.referenceId === chapterId))
     }));
   };
 
@@ -220,7 +225,8 @@ export default function App() {
         chapter.id === chapterId 
           ? { ...chapter, sections: chapter.sections.filter(s => s.id !== sectionId) } 
           : chapter
-      )
+      ),
+      mindMapNodes: prev.mindMapNodes.filter(n => !(n.type === 'section' && n.referenceId === sectionId))
     }));
     if (selectedSectionId === sectionId) {
       setSelectedSectionId(null);
@@ -502,7 +508,20 @@ function MindMap({
 }) {
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [edgeStartNodeId, setEdgeStartNodeId] = useState<string | null>(null);
+  const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
+
+  const COLORS = [
+    { name: 'Default', value: undefined },
+    { name: 'White', value: '#FFFFFF' },
+    { name: 'Gray', value: '#F3F4F6' },
+    { name: 'Amber', value: '#FEF3C7' },
+    { name: 'Blue', value: '#DBEAFE' },
+    { name: 'Green', value: '#DCFCE7' },
+    { name: 'Red', value: '#FEE2E2' },
+    { name: 'Purple', value: '#F3E8FF' },
+  ];
 
   useEffect(() => {
     if (containerRef.current) {
@@ -513,24 +532,60 @@ function MindMap({
     }
   }, []);
 
-  // Ensure all chapters have nodes
+  // Ensure all chapters, sections, and topics have nodes
   useEffect(() => {
-    const existingChapterIds = new Set(project.mindMapNodes.map(n => n.chapterId));
-    const missingChapters = project.chapters.filter(c => !existingChapterIds.has(c.id));
-    
-    if (missingChapters.length > 0) {
-      const newNodes = [...project.mindMapNodes];
-      missingChapters.forEach((c, idx) => {
+    const existingNodes = project.mindMapNodes;
+    const newNodes = [...existingNodes];
+    let changed = false;
+
+    // Chapters
+    project.chapters.forEach((c, idx) => {
+      if (!existingNodes.find(n => n.type === 'chapter' && n.referenceId === c.id)) {
         newNodes.push({
-          id: `n${Date.now()}${idx}`,
-          chapterId: c.id,
-          x: 100 + (idx * 50),
-          y: 100 + (idx * 50)
+          id: `n_c_${c.id}`,
+          type: 'chapter',
+          referenceId: c.id,
+          x: 100 + (idx * 40),
+          y: 100 + (idx * 40)
         });
+        changed = true;
+      }
+    });
+
+    // Sections
+    project.chapters.forEach((c, cIdx) => {
+      c.sections.forEach((s, sIdx) => {
+        if (!existingNodes.find(n => n.type === 'section' && n.referenceId === s.id)) {
+          newNodes.push({
+            id: `n_s_${s.id}`,
+            type: 'section',
+            referenceId: s.id,
+            x: 300 + (sIdx * 40),
+            y: 100 + (cIdx * 100) + (sIdx * 30)
+          });
+          changed = true;
+        }
       });
+    });
+
+    // Topics (Brain Dump)
+    project.topics.forEach((t, idx) => {
+      if (!existingNodes.find(n => n.type === 'topic' && n.referenceId === t.id)) {
+        newNodes.push({
+          id: `n_t_${t.id}`,
+          type: 'topic',
+          referenceId: t.id,
+          x: 500 + (idx * 40),
+          y: 100 + (idx * 40)
+        });
+        changed = true;
+      }
+    });
+
+    if (changed) {
       onUpdateNodes(newNodes);
     }
-  }, [project.chapters, project.mindMapNodes, onUpdateNodes]);
+  }, [project.chapters, project.topics, project.mindMapNodes, onUpdateNodes]);
 
   const handleDragEnd = (nodeId: string, e: any) => {
     const updatedNodes = project.mindMapNodes.map(n => 
@@ -552,34 +607,113 @@ function MindMap({
       }
       setEdgeStartNodeId(null);
     } else {
-      setEdgeStartNodeId(nodeId);
+      setSelectedNodeId(nodeId);
     }
+  };
+
+  const handleNodeDoubleClick = (nodeId: string) => {
+    setEdgeStartNodeId(nodeId);
+    setSelectedNodeId(null);
   };
 
   const handleDeleteEdge = (edgeId: string) => {
     onUpdateEdges(project.mindMapEdges.filter(e => e.id !== edgeId));
   };
 
+  const handleUpdateColor = (color: string | undefined) => {
+    if (!selectedNodeId) return;
+    onUpdateNodes(project.mindMapNodes.map(n => 
+      n.id === selectedNodeId ? { ...n, color } : n
+    ));
+  };
+
+  const getNodeData = (node: MindMapNode) => {
+    let baseData: { title: string, color: string, stroke: string } | null = null;
+    
+    if (node.type === 'chapter') {
+      const chapter = project.chapters.find(c => c.id === node.referenceId);
+      if (chapter) baseData = { title: chapter.title, color: '#FFFFFF', stroke: '#000000' };
+    } else if (node.type === 'section') {
+      for (const chapter of project.chapters) {
+        const section = chapter.sections.find(s => s.id === node.referenceId);
+        if (section) {
+          baseData = { title: section.title, color: '#F3F4F6', stroke: '#9CA3AF' };
+          break;
+        }
+      }
+    } else if (node.type === 'topic') {
+      const topic = project.topics.find(t => t.id === node.referenceId);
+      if (topic) baseData = { title: topic.title, color: '#FEF3C7', stroke: '#F59E0B' };
+    }
+
+    if (baseData && node.color) {
+      baseData.color = node.color;
+    }
+    
+    return baseData;
+  };
+
+  const NODE_WIDTH = 160;
+  const NODE_HEIGHT = 60;
+
   return (
     <div className="h-full flex flex-col bg-gray-50">
-      <header className="p-8 pb-4">
-        <h2 className="text-3xl font-bold tracking-tight">Logic Flow</h2>
-        <p className="text-gray-500 mt-1">Visualize connections and narrative progression between chapters</p>
-        <div className="mt-4 flex gap-4 text-xs font-medium text-gray-400">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-black rounded" /> Drag nodes to reposition
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 border-2 border-black rounded-full" /> Click two nodes to connect them
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-red-500 rounded-full" /> Click a connection to delete it
+      <header className="p-8 pb-4 flex justify-between items-start">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Logic Flow</h2>
+          <p className="text-gray-500 mt-1">Visualize connections and narrative progression</p>
+          <div className="mt-4 flex flex-wrap gap-4 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-white border border-black rounded" /> Chapter
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-gray-100 border border-gray-400 rounded" /> Section
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-amber-100 border border-amber-500 rounded" /> Brain Dump
+            </div>
+            <div className="flex items-center gap-2 ml-4">
+              <div className="w-3 h-3 border-2 border-black rounded-full" /> Double-click to connect
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-black rounded" /> Drag stage to pan
+            </div>
           </div>
         </div>
+        
+        {selectedNodeId && (
+          <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex items-center gap-3">
+            <span className="text-[10px] font-bold uppercase text-gray-400">Color:</span>
+            <div className="flex gap-1">
+              {COLORS.map(c => (
+                <button 
+                  key={c.name}
+                  onClick={() => handleUpdateColor(c.value)}
+                  className="w-6 h-6 rounded-full border border-gray-200 transition-transform hover:scale-110"
+                  style={{ backgroundColor: c.value || '#FFFFFF' }}
+                  title={c.name}
+                />
+              ))}
+            </div>
+            <button 
+              onClick={() => setSelectedNodeId(null)}
+              className="ml-2 p-1 hover:bg-gray-100 rounded text-gray-400"
+            >
+              <Plus className="rotate-45" size={16} />
+            </button>
+          </div>
+        )}
       </header>
       
-      <div ref={containerRef} className="flex-1 relative overflow-hidden cursor-crosshair">
-        <Stage width={dimensions.width} height={dimensions.height}>
+      <div ref={containerRef} className="flex-1 relative overflow-hidden cursor-grab active:cursor-grabbing">
+        <Stage 
+          width={dimensions.width} 
+          height={dimensions.height}
+          draggable
+          onDragEnd={(e) => setStagePos({ x: e.target.x(), y: e.target.y() })}
+          x={stagePos.x}
+          y={stagePos.y}
+        >
           <Layer>
             {/* Edges */}
             {project.mindMapEdges.map(edge => {
@@ -590,7 +724,7 @@ function MindMap({
               return (
                 <KonvaLine
                   key={edge.id}
-                  points={[fromNode.x + 100, fromNode.y + 40, toNode.x + 100, toNode.y + 40]}
+                  points={[fromNode.x + NODE_WIDTH/2, fromNode.y + NODE_HEIGHT/2, toNode.x + NODE_WIDTH/2, toNode.y + NODE_HEIGHT/2]}
                   stroke="#E5E7EB"
                   strokeWidth={2}
                   onClick={() => handleDeleteEdge(edge.id)}
@@ -602,7 +736,7 @@ function MindMap({
                   }}
                   onMouseLeave={(e: any) => {
                     const container = e.target.getStage().container();
-                    container.style.cursor = 'crosshair';
+                    container.style.cursor = 'grab';
                     e.target.stroke('#E5E7EB');
                     e.target.draw();
                   }}
@@ -612,10 +746,11 @@ function MindMap({
 
             {/* Nodes */}
             {project.mindMapNodes.map(node => {
-              const chapter = project.chapters.find(c => c.id === node.chapterId);
-              if (!chapter) return null;
+              const data = getNodeData(node);
+              if (!data) return null;
 
-              const isSelected = edgeStartNodeId === node.id;
+              const isSelected = selectedNodeId === node.id;
+              const isConnecting = edgeStartNodeId === node.id;
 
               return (
                 <Group
@@ -625,40 +760,41 @@ function MindMap({
                   draggable
                   onDragEnd={(e) => handleDragEnd(node.id, e)}
                   onClick={() => handleNodeClick(node.id)}
+                  onDblClick={() => handleNodeDoubleClick(node.id)}
                   onMouseEnter={(e: any) => {
                     const container = e.target.getStage().container();
-                    container.style.cursor = 'grab';
+                    container.style.cursor = 'pointer';
                   }}
                   onMouseLeave={(e: any) => {
                     const container = e.target.getStage().container();
-                    container.style.cursor = 'crosshair';
+                    container.style.cursor = 'grab';
                   }}
                 >
                   <Rect
-                    width={200}
-                    height={80}
-                    fill="white"
-                    cornerRadius={12}
-                    stroke={isSelected ? "black" : "#F3F4F6"}
-                    strokeWidth={isSelected ? 2 : 1}
-                    shadowBlur={5}
+                    width={NODE_WIDTH}
+                    height={NODE_HEIGHT}
+                    fill={data.color}
+                    cornerRadius={8}
+                    stroke={isSelected || isConnecting ? "black" : data.stroke}
+                    strokeWidth={isSelected || isConnecting ? 2 : 1}
+                    shadowBlur={isSelected ? 10 : 5}
                     shadowColor="rgba(0,0,0,0.05)"
                   />
                   <Text
-                    text={chapter.title}
-                    fontSize={12}
+                    text={data.title}
+                    fontSize={10}
                     fontStyle="bold"
-                    width={180}
+                    width={NODE_WIDTH - 20}
                     padding={10}
                     align="center"
                     verticalAlign="middle"
-                    height={80}
+                    height={NODE_HEIGHT}
                     wrap="char"
                   />
-                  {isSelected && (
+                  {isConnecting && (
                     <Circle
-                      x={200}
-                      y={40}
+                      x={NODE_WIDTH}
+                      y={NODE_HEIGHT/2}
                       radius={4}
                       fill="black"
                     />
@@ -668,6 +804,16 @@ function MindMap({
             })}
           </Layer>
         </Stage>
+        
+        <button 
+          onClick={() => {
+            setStagePos({ x: 0, y: 0 });
+          }}
+          className="absolute bottom-6 right-6 bg-white p-3 rounded-full shadow-lg border border-gray-100 hover:bg-gray-50 transition-colors"
+          title="Reset View"
+        >
+          <Target size={20} />
+        </button>
       </div>
     </div>
   );
