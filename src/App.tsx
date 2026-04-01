@@ -511,6 +511,7 @@ function MindMap({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [edgeStartNodeId, setEdgeStartNodeId] = useState<string | null>(null);
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
+  const [stageScale, setStageScale] = useState(1);
 
   const COLORS = [
     { name: 'Default', value: undefined },
@@ -653,8 +654,55 @@ function MindMap({
     return baseData;
   };
 
-  const NODE_WIDTH = 160;
-  const NODE_HEIGHT = 60;
+  const NODE_WIDTH = 140;
+  const NODE_HEIGHT = 50;
+
+  const handleWheel = (e: any) => {
+    e.evt.preventDefault();
+    const scaleBy = 1.1;
+    const stage = e.target.getStage();
+    const oldScale = stage.scaleX();
+    const pointer = stage.getPointerPosition();
+
+    const mousePointTo = {
+      x: (pointer.x - stage.x()) / oldScale,
+      y: (pointer.y - stage.y()) / oldScale,
+    };
+
+    const newScale = e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
+
+    // Limit zoom
+    if (newScale < 0.2 || newScale > 3) return;
+
+    setStageScale(newScale);
+    setStagePos({
+      x: pointer.x - mousePointTo.x * newScale,
+      y: pointer.y - mousePointTo.y * newScale,
+    });
+  };
+
+  const handleZoom = (delta: number) => {
+    const scaleBy = 1.2;
+    const newScale = delta > 0 ? stageScale * scaleBy : stageScale / scaleBy;
+    
+    // Limit zoom
+    if (newScale < 0.2 || newScale > 3) return;
+    
+    // Zoom relative to center of stage
+    const centerX = dimensions.width / 2;
+    const centerY = dimensions.height / 2;
+    
+    const mousePointTo = {
+      x: (centerX - stagePos.x) / stageScale,
+      y: (centerY - stagePos.y) / stageScale,
+    };
+    
+    setStageScale(newScale);
+    setStagePos({
+      x: centerX - mousePointTo.x * newScale,
+      y: centerY - mousePointTo.y * newScale,
+    });
+  };
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
@@ -676,7 +724,7 @@ function MindMap({
               <div className="w-3 h-3 border-2 border-black rounded-full" /> Double-click to connect
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-black rounded" /> Drag stage to pan
+              <div className="w-3 h-3 bg-black rounded" /> Drag stage to pan / Scroll to zoom
             </div>
           </div>
         </div>
@@ -705,12 +753,20 @@ function MindMap({
         )}
       </header>
       
-      <div ref={containerRef} className="flex-1 relative overflow-hidden cursor-grab active:cursor-grabbing">
+      <div ref={containerRef} className="flex-1 relative overflow-hidden cursor-grab active:cursor-grabbing" style={{ touchAction: 'none' }}>
         <Stage 
           width={dimensions.width} 
           height={dimensions.height}
           draggable
-          onDragEnd={(e) => setStagePos({ x: e.target.x(), y: e.target.y() })}
+          onDragEnd={(e) => {
+            // Only update stage position if the stage itself was dragged
+            if (e.target === e.target.getStage()) {
+              setStagePos({ x: e.target.x(), y: e.target.y() });
+            }
+          }}
+          onWheel={handleWheel}
+          scaleX={stageScale}
+          scaleY={stageScale}
           x={stagePos.x}
           y={stagePos.y}
         >
@@ -758,7 +814,16 @@ function MindMap({
                   x={node.x}
                   y={node.y}
                   draggable
-                  onDragEnd={(e) => handleDragEnd(node.id, e)}
+                  onDragStart={(e) => {
+                    e.cancelBubble = true;
+                  }}
+                  onDragMove={(e) => {
+                    e.cancelBubble = true;
+                  }}
+                  onDragEnd={(e) => {
+                    e.cancelBubble = true;
+                    handleDragEnd(node.id, e);
+                  }}
                   onClick={() => handleNodeClick(node.id)}
                   onDblClick={() => handleNodeDoubleClick(node.id)}
                   onMouseEnter={(e: any) => {
@@ -782,7 +847,7 @@ function MindMap({
                   />
                   <Text
                     text={data.title}
-                    fontSize={10}
+                    fontSize={9}
                     fontStyle="bold"
                     width={NODE_WIDTH - 20}
                     padding={10}
@@ -805,15 +870,32 @@ function MindMap({
           </Layer>
         </Stage>
         
-        <button 
-          onClick={() => {
-            setStagePos({ x: 0, y: 0 });
-          }}
-          className="absolute bottom-6 right-6 bg-white p-3 rounded-full shadow-lg border border-gray-100 hover:bg-gray-50 transition-colors"
-          title="Reset View"
-        >
-          <Target size={20} />
-        </button>
+        <div className="absolute bottom-6 right-6 flex flex-col gap-2">
+          <button 
+            onClick={() => handleZoom(1)}
+            className="bg-white p-3 rounded-full shadow-lg border border-gray-100 hover:bg-gray-50 transition-colors"
+            title="Zoom In"
+          >
+            <Plus size={20} />
+          </button>
+          <button 
+            onClick={() => handleZoom(-1)}
+            className="bg-white p-3 rounded-full shadow-lg border border-gray-100 hover:bg-gray-50 transition-colors"
+            title="Zoom Out"
+          >
+            <div className="w-5 h-0.5 bg-current mx-auto" />
+          </button>
+          <button 
+            onClick={() => {
+              setStagePos({ x: 0, y: 0 });
+              setStageScale(1);
+            }}
+            className="bg-white p-3 rounded-full shadow-lg border border-gray-100 hover:bg-gray-50 transition-colors"
+            title="Reset View"
+          >
+            <Target size={20} />
+          </button>
+        </div>
       </div>
     </div>
   );
